@@ -25,6 +25,8 @@ export function registerCodeMode(
 
     const executeTool = createExecuteTool({
         prefix: "icd11",
+        // Verifiable provenance: icd11_execute results carry a _meta.citation.
+        source: { id: "icd11", name: "WHO ICD-11", url: "https://icd.who.int" },
         catalog: icd11Catalog,
         apiFetch,
         doNamespace: env.ICD11_DATA_DO,
