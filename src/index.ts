@@ -7,6 +7,9 @@ import { Icd11DataDO } from "./do";
 
 export { Icd11DataDO };
 
+// Workers Builds reconnection canary (2026-07-02): a no-op change to force a
+// standalone-repo sync and confirm auto-deploy fires. Safe to remove.
+
 interface Icd11Env {
     ICD11_CLIENT_ID: string;
     ICD11_CLIENT_SECRET: string;
