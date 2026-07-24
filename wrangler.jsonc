@@ -52,10 +52,6 @@
 			"binding": "CODE_MODE_LOADER"
 		}
 	],
-	"vars": {
-		"ICD11_CLIENT_ID": "",
-		"ICD11_CLIENT_SECRET": ""
-	},
 	"observability": {
 		"enabled": true
 	},
