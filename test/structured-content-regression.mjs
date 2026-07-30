@@ -39,7 +39,7 @@ console.log(`${BLUE}🧪 WHO ICD-11 Structured Content Regression Tests${RESET}`
 // Verify index.ts structure
 const indexContent = readFile('src/index.ts');
 assertContains('src/index.ts', indexContent, 'Icd11DataDO', 'index.ts exports Icd11DataDO');
-assertContains('src/index.ts', indexContent, 'McpAgent', 'index.ts uses McpAgent');
+assertContains('src/index.ts', indexContent, 'StatelessMcpWorker', 'index.ts uses StatelessMcpWorker');
 assertContains('src/index.ts', indexContent, 'registerCodeMode', 'index.ts registers code mode');
 assertContains('src/index.ts', indexContent, 'registerQueryData', 'index.ts registers query data');
 assertContains('src/index.ts', indexContent, 'registerGetSchema', 'index.ts registers get schema');
