@@ -9,8 +9,8 @@ import { Icd11DataDO } from "./do";
 export { Icd11DataDO };
 
 interface Icd11Env {
-    ICD11_CLIENT_ID: string;
-    ICD11_CLIENT_SECRET: string;
+    ICD11_CLIENT_ID?: string;
+    ICD11_CLIENT_SECRET?: string;
     ICD11_DATA_DO: DurableObjectNamespace;
     CODE_MODE_LOADER: WorkerLoader;
 }

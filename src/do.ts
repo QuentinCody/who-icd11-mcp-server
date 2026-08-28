@@ -7,6 +7,22 @@ export class Icd11DataDO extends RestStagingDO {
 
         const obj = data as Record<string, unknown>;
 
+        // Keyless tier: rows from WHO's MMS release file or the NLM mirror.
+        if (obj.tier === "keyless_offline" && Array.isArray(obj.results)) {
+            return {
+                tableName: "mms_rows",
+                indexes: [
+                    "code",
+                    "title",
+                    "chapter_no",
+                    "class_kind",
+                    "entity_id",
+                    "parent_entity_id",
+                    "block_id",
+                ],
+            };
+        }
+
         // ICD-11 entity response (single entity with @context, @id, title)
         if (obj["@context"] || obj["@id"]) {
             if (obj.title || obj.definition) {

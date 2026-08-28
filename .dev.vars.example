@@ -1,0 +1,5 @@
+# WHO ICD-11 API credential (free, self-service: https://icd.who.int/icdapi/Account/Register)
+# Copy to .dev.vars and fill in. Without these the server still serves its keyless
+# /offline/* tier; the gated id.who.int endpoints fail with an actionable error.
+ICD11_CLIENT_ID=""
+ICD11_CLIENT_SECRET=""

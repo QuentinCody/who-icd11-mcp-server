@@ -8,9 +8,9 @@
 const TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token";
 const ICD11_BASE = "https://id.who.int/icd";
 
-interface Icd11Env {
-    ICD11_CLIENT_ID: string;
-    ICD11_CLIENT_SECRET: string;
+export interface Icd11Env {
+    ICD11_CLIENT_ID?: string;
+    ICD11_CLIENT_SECRET?: string;
 }
 
 // Module-level token cache
@@ -22,6 +22,17 @@ let tokenExpiresAt = 0;
  * Caches the token until 60 seconds before expiry.
  */
 async function getAccessToken(env: Icd11Env): Promise<string> {
+    // Without this guard WHO answers an empty client_id with a bare
+    // 400 {"error":"invalid_client"}, which reads like a rejected key rather
+    // than a Worker that was never given one.
+    if (!env.ICD11_CLIENT_ID || !env.ICD11_CLIENT_SECRET) {
+        throw new Error(
+            "ICD11_CLIENT_ID / ICD11_CLIENT_SECRET are not set on this Worker, so the gated " +
+                "WHO ICD-11 API cannot be called. Register free at " +
+                "https://icd.who.int/icdapi/Account/Register and set both with 'wrangler secret put'.",
+        );
+    }
+
     const now = Date.now();
     if (cachedToken && now < tokenExpiresAt) {
         return cachedToken;

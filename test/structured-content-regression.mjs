@@ -29,6 +29,19 @@ function assertContains(filePath, haystack, needle, testName) {
   }
 }
 
+function assertNotContains(filePath, haystack, needle, testName) {
+  totalTests++;
+  if (!haystack.includes(needle)) {
+    console.log(`${GREEN}\u2713${RESET} ${testName}`);
+    passedTests++;
+  } else {
+    console.log(`${RED}\u2717${RESET} ${testName}`);
+    console.log(`  Must not contain: ${needle}`);
+    console.log(`  File: ${filePath}`);
+    failedTests++;
+  }
+}
+
 function readFile(relPath) {
   const absPath = path.resolve(SERVER_ROOT, relPath);
   return fs.readFileSync(absPath, 'utf8');
@@ -67,6 +80,26 @@ assertContains('src/spec/catalog.ts', catalogContent, 'ApiCatalog', 'catalog use
 assertContains('src/spec/catalog.ts', catalogContent, '/entity/search', 'catalog has entity search');
 assertContains('src/spec/catalog.ts', catalogContent, '/release/11/', 'catalog has linearization endpoints');
 assertContains('src/spec/catalog.ts', catalogContent, 'autocode', 'catalog has autocode endpoint');
+assertContains('src/spec/catalog.ts', catalogContent, '/offline/mms/search', 'catalog documents the keyless search endpoint');
+assertContains('src/spec/catalog.ts', catalogContent, 'icdcdn.who.int', 'catalog names the keyless WHO release file');
+assertContains('src/spec/catalog.ts', catalogContent, 'clinicaltables.nlm.nih.gov', 'catalog names the NLM mirror');
+assertContains('src/spec/catalog.ts', catalogContent, 'KEYLESS TIER LOSES', 'catalog states what the keyless tier drops');
+assertContains('src/spec/catalog.ts', catalogContent, '2026-01', 'catalog points examples at the current release');
+assertContains('src/spec/catalog.ts', catalogContent, "119724091 = 'Type 2 diabetes mellitus'", 'catalog labels entity 119724091 as Type 2 diabetes mellitus');
+assertNotContains('src/spec/catalog.ts', catalogContent, '1435254666 for Type 2 diabetes', 'catalog no longer mislabels entity 1435254666');
+
+// Verify the keyless tier is wired, sourced and gated
+const offlineContent = readFile('src/lib/offline-release.ts');
+assertContains('src/lib/offline-release.ts', offlineContent, 'https://icdcdn.who.int/static/releasefiles', 'offline tier reads WHO first-party release files');
+const zipContent = readFile('src/lib/zip.ts');
+assertContains('src/lib/zip.ts', zipContent, 'deflate-raw', 'zip reader inflates the release archive');
+const nlmContent = readFile('src/lib/nlm.ts');
+assertContains('src/lib/nlm.ts', nlmContent, 'clinicaltables.nlm.nih.gov/api/icd11_codes/v3', 'NLM adapter targets the keyless ICD-11 index');
+assertContains('src/lib/api-adapter.ts', adapterContent, 'keyless_offline', 'keyless results are labelled with their tier');
+assertContains('src/lib/api-adapter.ts', adapterContent, 'credentialError', 'a missing credential raises an error');
+assertContains('src/lib/api-adapter.ts', adapterContent, 'icdcdn.who.int', 'keyless provenance names its own source');
+const doContent2 = readFile('src/do.ts');
+assertContains('src/do.ts', doContent2, 'mms_rows', 'DO stages keyless rows into their own table');
 
 // Verify code-mode.ts
 const codeModeContent = readFile('src/tools/code-mode.ts');
