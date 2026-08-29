@@ -242,6 +242,9 @@ export const icd11Catalog: ApiCatalog = {
             summary:
                 "Search within a specific linearization (e.g. MMS) for codes matching a query. Returns coded results with ICD-11 codes, scores, and chapter info.",
             category: "linearization",
+            pathParams: [
+            	{ name: "linearizationname", type: "string", required: true, description: "ICD-11 linearization name — use `mms` for Mortality and Morbidity Statistics." },
+            ],
             queryParams: [
                 { name: "q", type: "string", required: true, description: "Search query text" },
                 { name: "useFlexisearch", type: "boolean", required: false, description: "Enable fuzzy/flexible matching (default: false)" },
