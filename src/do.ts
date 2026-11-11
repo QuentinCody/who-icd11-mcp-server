@@ -1,16 +1,28 @@
 import { RestStagingDO } from "@bio-mcp/shared/staging/rest-staging-do";
 import type { SchemaHints } from "@bio-mcp/shared/staging/schema-inference";
+import { icd11Tables, nativeIcd11 } from "./lib/staging";
 
 export class Icd11DataDO extends RestStagingDO {
-    protected getSchemaHints(data: unknown): SchemaHints | undefined {
+    protected getTabularData(value: unknown): unknown {
+        return icd11Tables(nativeIcd11(value));
+    }
+
+    protected getSchemaHints(value: unknown): SchemaHints | undefined {
+        const data = nativeIcd11(value);
         if (!data || typeof data !== "object") return undefined;
 
         const obj = data as Record<string, unknown>;
+        if (typeof obj.resourceType === "string" || typeof obj.sql === "string" && Array.isArray(obj.rows)) return { columnTypes: {
+            native_json: "TEXT", path: "TEXT", parent_path: "TEXT", name: "TEXT", code: "TEXT", system: "TEXT", version: "TEXT", resource_type: "TEXT",
+            node_index: "INTEGER", sibling_index: "INTEGER", entry_index: "INTEGER", response_index: "INTEGER", row_index: "INTEGER",
+        } };
 
         // Keyless tier: rows from WHO's MMS release file or the NLM mirror.
         if (obj.tier === "keyless_offline" && Array.isArray(obj.results)) {
+            const rows = obj.results;
             return {
                 tableName: "mms_rows",
+                columnTypes: { code: "TEXT", title: "TEXT", chapter_no: "TEXT", class_kind: "TEXT", entity_id: "TEXT", parent_entity_id: "TEXT", block_id: "TEXT" },
                 indexes: [
                     "code",
                     "title",
@@ -19,7 +31,7 @@ export class Icd11DataDO extends RestStagingDO {
                     "entity_id",
                     "parent_entity_id",
                     "block_id",
-                ],
+                ].filter(name => rows.some(row => row && typeof row === "object" && name in row)),
             };
         }
 

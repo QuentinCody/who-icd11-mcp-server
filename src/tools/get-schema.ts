@@ -1,4 +1,5 @@
 import type { McpServer } from "@bio-mcp/shared/mcp";
+import { icd11Response } from "../lib/tool-result";
 import { z } from "zod";
 import { createGetSchemaHandler } from "@bio-mcp/shared/staging/utils";
 
@@ -9,8 +10,8 @@ interface SchemaEnv {
 export function registerGetSchema(server: McpServer, env?: SchemaEnv): void {
     const handler = createGetSchemaHandler("ICD11_DATA_DO", "icd11");
 
-    server.registerTool(
-        "icd11_get_schema",
+    for (const name of ["icd11_get_schema", "mcp_icd11_get_schema"]) server.registerTool(
+        name,
         {
             title: "Get Staged Data Schema",
             description:
@@ -29,11 +30,11 @@ export function registerGetSchema(server: McpServer, env?: SchemaEnv): void {
         async (args, extra) => {
             const runtimeEnv =
                 env || (extra as { env?: SchemaEnv })?.env || {};
-            return handler(
+            return icd11Response(() => handler(
                 args as Record<string, unknown>,
                 runtimeEnv as Record<string, unknown>,
                 (extra as Record<string, unknown>),
-            );
+            ), runtimeEnv, name, extra, args);
         },
     );
 }

@@ -1,4 +1,5 @@
 import type { ApiCatalog } from "@bio-mcp/shared/codemode/catalog";
+import { fhirEndpoints, fhirWorkflows, releaseDiscoveryEndpoints } from "./fhir";
 
 /**
  * Two tiers live in one catalog, on paths that cannot be confused:
@@ -13,7 +14,7 @@ import type { ApiCatalog } from "@bio-mcp/shared/codemode/catalog";
 export const icd11Catalog: ApiCatalog = {
     name: "WHO ICD-11",
     baseUrl: "https://id.who.int/icd",
-    version: "MMS release 2026-01 · gated API v2",
+    version: "native API v2 / pre-release FHIR R5; dataset release varies by route",
     auth: "oauth2_client_credentials (gated endpoints) | none (/offline/* endpoints)",
     endpointCount: 16,
     notes:
@@ -26,10 +27,12 @@ export const icd11Catalog: ApiCatalog = {
         "- Entity ids are numeric: 119724091 = 'Type 2 diabetes mellitus' (MMS code 5A11); 1435254666 = 'Certain infectious or parasitic diseases' (chapter 01). Residual rows have a code but NO foundation entity id.\n" +
         "- The primary linearization is 'mms' (Mortality and Morbidity Statistics). Current releases are 2026-01 and 2025-01; an unpinned /release/11/mms/... path serves WHO's latest.\n" +
         "- Gated tier: search supports useFlexisearch=true (fuzzy) and flatResults=true (flat list, easier to program against). OAuth is handled for you; never put credentials in code.\n" +
-        "- All gated requests send API-Version: v2 and Accept-Language: en.\n" +
+        "- Native REST sends API-Version: v2 and Accept-Language: en. /fhir/* is a separate PRE-RELEASE R5 surface with the same OAuth credential. FHIR docs list 2025-01; discover actual CodeSystem versions instead of assuming offline 2026-01 support. Lookup requires system/version/displayLanguage; other FHIR reads accept adapter-only language for the HTTP header.\n" +
         "- KEYLESS PARAMS ARE VALIDATED: every /offline/* endpoint rejects a parameter it does not know (and /offline/mms/rows rejects an unknown filter column) instead of ignoring it, so a typo like class_knd fails loudly rather than returning the unfiltered set.\n" +
         "- api.get(path, params) returns the response BODY directly — there is no .data wrapper. Keyless bodies are { tier, degraded, provenance, ... }.",
     endpoints: [
+        ...fhirEndpoints,
+        ...releaseDiscoveryEndpoints,
         // ── Keyless tier — WHO release file + NLM mirror (no credential) ──
         {
             method: "GET",
@@ -153,7 +156,7 @@ export const icd11Catalog: ApiCatalog = {
         {
             method: "GET",
             path: "/entity",
-            summary: "Get the root entity of the ICD-11 Foundation. Returns top-level child entity URIs.",
+            summary: "Get the Foundation root. API 2.6 adds allreleases and availableLanguages alongside child entity URIs; preserve full release/language metadata.",
             category: "entity",
         },
         {
@@ -270,6 +273,7 @@ export const icd11Catalog: ApiCatalog = {
         },
     ],
     workflows: [
+        ...fhirWorkflows,
         {
             title: "Code a term without a WHO credential",
             description:
@@ -278,20 +282,16 @@ export const icd11Catalog: ApiCatalog = {
             code: [
                 "// api.get returns the response body directly (no .data wrapper).",
                 "const hits = await api.get('/offline/mms/search', { q: 'type 2 diabetes', class_kind: 'category', limit: 5 });",
+                "if (hits.__api_error || hits.__staged || hits.__stage_error || !hits.results?.length) return hits;",
                 "const best = hits.results[0];",
                 "const detail = await api.get('/offline/mms/code/' + best.code);",
-                "return {",
-                "  code: best.code,",
-                "  title: best.title,",
-                "  chapter: best.chapter_no,",
-                "  ancestors: detail.ancestors.map((a) => a.title),",
-                "  tier: detail.tier,",
-                "  source: detail.provenance.source_url,",
-                "};",
+                "if (detail.__api_error || detail.__staged || detail.__stage_error) return detail;",
+                "return { search: hits, detail };",
             ].join("\n"),
         },
     ],
 };
+icd11Catalog.endpointCount = icd11Catalog.endpoints.length;
 
 /**
  * Copy of the catalog whose notes open with the tier that is actually live on
@@ -300,7 +300,7 @@ export const icd11Catalog: ApiCatalog = {
  */
 export function buildIcd11Catalog(liveApiEnabled: boolean): ApiCatalog {
     const status = liveApiEnabled
-        ? "- CREDENTIAL STATUS: configured. Both tiers work; prefer the gated endpoints for definitions, synonyms, exclusions and autocode.\n"
-        : "- CREDENTIAL STATUS: NOT configured on this deployment. Gated endpoints (/entity*, /release/11/*) will FAIL. Use the /offline/* endpoints, which need no credential.\n";
+        ? "- CREDENTIAL STATUS: configured, acceptance unverified. Native REST and pre-release FHIR use WHO OAuth; keyless routes remain available.\n"
+        : "- CREDENTIAL STATUS: NOT configured on this deployment. Gated endpoints (/entity*, /release/11/*, /fhir/*) will FAIL. Use the /offline/* endpoints, which need no credential.\n";
     return { ...icd11Catalog, notes: status + (icd11Catalog.notes ?? "") };
 }

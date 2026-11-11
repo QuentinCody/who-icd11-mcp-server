@@ -38,7 +38,7 @@ For local development the server runs at `http://localhost:8875/mcp` (start it w
 
 ## Tools
 
-- `icd11_search` — discover available API operations (Code Mode catalog search, 16 endpoints across both tiers)
+- `icd11_search` — discover native REST, pre-release FHIR and keyless API operations and recipes
 - `icd11_execute` — **Code Mode**: write JavaScript in a V8 isolate (`api.get()` / `api.post()` / `searchSpec()`) instead of issuing tool calls one by one
 - `icd11_query_data` — run SQL over large responses auto-staged into a per-session SQLite database
 - `icd11_get_schema` — inspect the inferred schema of a staged dataset
@@ -46,6 +46,62 @@ For local development the server runs at `http://localhost:8875/mcp` (start it w
 Large responses (>30KB) are auto-staged into a queryable SQLite database; the tools return a `data_access_id` you can query with SQL.
 
 Every tool returns both a human-readable `content` summary and a structured `structuredContent` payload.
+Each tool also has an `mcp_` alias (for example, `mcp_icd11_execute`).
+
+## Pre-release FHIR and API 2.6 discovery
+
+WHO [API 2.6](https://icd.who.int/docs/icd-api/ReleaseNotes-Version2.6/)
+adds release/language metadata at `/entity` (`allreleases`, `availableLanguages`)
+and `/release/11/{releaseId}/{linearizationname}` (`availableLanguages`,
+`prereleaseLanguages`). Both routes retain the full provider response. Native
+API release availability does not prove that a release is available through FHIR.
+
+The separate [WHO FHIR R5 service](https://icd.who.int/docs/icd-api/ICDAPI-FHIR-Support/)
+is **pre-release**, at `https://id.who.int/fhir`, alongside the native `/icd`
+service. Its documentation still lists classification release **2025-01** as of
+this review; the existing offline MMS **2026-01** file is a different surface.
+FHIR uses the existing `ICD11_CLIENT_ID` / `ICD11_CLIENT_SECRET` OAuth secrets and
+does not fall back to the release file or NLM when unavailable.
+
+| Catalog path | Use |
+| --- | --- |
+| `/fhir/metadata` | Service capabilities; `mode=terminology` requests terminology capabilities. |
+| `/fhir/CodeSystem`, `/fhir/CodeSystem/{id}` | Discover available systems/releases and read returned resource IDs. |
+| `/fhir/CodeSystem/$lookup` | Explicit `system`, `version`, `code`, `displayLanguage`; returned version must match. |
+| `/fhir/CodeSystem/$validate-code` | Explicit `url`, `version`, `code`, `language`; preserve negative results and provider diagnostics. |
+| `/fhir/ValueSet` | Discover postcoordination scale definitions by their canonical URL. |
+| `/fhir/ValueSet/$expand` | Expand a release-qualified scale URL in an explicit `displayLanguage`. |
+| `/fhir/ValueSet/$validate-code` | Validate a code's scale membership using explicit URL, system, code and language. |
+
+Foundation, MMS and ICF have separate canonical systems. Foundation codes are
+full entity URIs; MMS/ICF accept their codes or matching linearization URIs.
+Release-qualified code URIs cannot disagree with the requested release. Scale
+URLs retain release, linearization, entity and axis. Membership in a scale is
+not validation of a whole postcoordinated expression or a clinical decision.
+
+`language` is an adapter-only HTTP `Accept-Language` selector; `displayLanguage`
+is the native lookup/expansion parameter and sets the same header. Discovery
+defaults to English; terminology operations require explicit language. Preserve
+returned designations and translation extensions when assessing language coverage.
+
+Responses retain complete FHIR resources plus `_who_fhir` source URL, retrieval
+time, requested scope and separately observed version/language fields. Requested
+release, CodeSystem version and ValueSet resource version are distinct. Empty
+searches do not establish availability. Validation `result=false` remains a valid
+negative answer; omitted version evidence remains unknown. Lookup version
+mismatches, malformed resources and HTTP-200 OperationOutcome errors fail explicitly.
+
+The adapter preserves expansion parameters, timestamps, totals, offsets and nested
+terms. [FHIR R5 permits hierarchical expansions to ignore paging](https://hl7.org/fhir/R5/valueset-operation-expand.html);
+`_who_fhir.expansion` reports that distinction, while flat expansions must honor
+requested count/offset. Native paging/filter support still needs live acceptance.
+Full results over 30 KiB stage through the shared tools; upstream FHIR reads are
+bounded to 2 MiB and a 45-second deadline. Code Mode allows 90 seconds for execution
+and staging. OAuth refresh is bounded to one retry and cached per credential pair.
+
+Local fixture tests cover these contracts and lossless staging. Authenticated
+FHIR data/release/language coverage and the live MCP contract remain unverified:
+the current environment cannot resolve the upstream host or bind the local Worker.
 
 ## Two tiers: gated WHO API, keyless release file
 
@@ -53,8 +109,8 @@ WHO's ICD-11 API is registration-gated. This server therefore serves two clearly
 
 | | Gated tier | Keyless tier |
 |---|---|---|
-| Paths | `/entity*`, `/release/11/*` | `/offline/*` |
-| Upstream | `https://id.who.int/icd` | `https://icdcdn.who.int/static/releasefiles/2026-01/SimpleTabulation-ICD-11-MMS-en.zip` (WHO) and `https://clinicaltables.nlm.nih.gov/api/icd11_codes/v3/search` (NLM/NIH mirror) |
+| Paths | `/entity*`, `/release/11/*`, `/fhir/*` | `/offline/*` |
+| Upstream | `https://id.who.int/icd` and pre-release `https://id.who.int/fhir` | `https://icdcdn.who.int/static/releasefiles/2026-01/SimpleTabulation-ICD-11-MMS-en.zip` (WHO) and `https://clinicaltables.nlm.nih.gov/api/icd11_codes/v3/search` (NLM/NIH mirror) |
 | Credential | `ICD11_CLIENT_ID` + `ICD11_CLIENT_SECRET` | none |
 | Has | definitions, synonyms, inclusion/exclusion notes, foundation search, `/autocode`, postcoordination, DORIS, all languages | the full MMS linearization: code, title, class kind, chapter, block, depth, residual/leaf flags, groupings, coding notes, parent entity |
 
@@ -98,3 +154,45 @@ See [`docs/adding-mcp-servers.md`](../../docs/adding-mcp-servers.md) and the roo
 ---
 
 *Auto-generated baseline README — refine with server-specific detail as needed.*
+
+## Response evidence and staging — October 6, 2026
+
+Authenticated native REST and FHIR reads share a 45-second deadline across OAuth,
+the single permitted 401 refresh, response headers and body reads. Bodies are
+limited to 2 MiB; token responses to 64 KiB. Redirects and partial HTTP responses
+are errors. Cancellation does not wait for an upstream cancellation promise.
+OAuth response bodies are withheld; API errors preserve sanitized source evidence.
+
+`_mcp.provenance` retains the complete source JSON text, original UTF-8 byte count
+and SHA-256, request context and retrieval time. It preserves BOM/whitespace and
+native metadata collisions. Credential echoes, including URL encoding and escaped
+JSON strings, are redacted and remain errors. The original-byte hash identifies
+the received body; redacted text is explicitly marked and is not byte-identical.
+FHIR release/type/page validation errors retain the full provider resource.
+`result=false` remains a valid negative validation answer.
+
+All eight tool aliases cite successes and errors, and stage complete MCP envelopes
+above 30 KiB with space reserved for SDK metadata. Gated API response completeness
+stays conservative through nested staging. A returned page, requested language or
+matching lookup release does not prove full classification/translation coverage.
+
+Staged FHIR data exposes `fhir_response` (complete native resource),
+`fhir_parameters` (ordered parameters and nested parts), `fhir_contains` (ordered
+expansion hierarchy) and `fhir_entries` (ordered Bundle entries). Each row retains
+native JSON; paths, parent paths and sibling indices preserve repeated names/codes.
+Serialized evidence remains in `payloads`; large SQL results restage in `query_rows`.
+Keyless results retain `mms_rows` and distinct WHO-archive/NLM provenance.
+
+The [response review](../../docs/audits/2026-10-06-who-icd11-response-review.md)
+records synthetic MCP/SQLite acceptance. Authenticated provider behavior and the
+edited Workerd runtime remain unqualified; nothing was deployed.
+
+<!-- license-and-data-terms:start -->
+## License and data terms
+
+The code in this repository is licensed under the Apache License 2.0 (see `LICENSE`).
+If you use it in your work, please cite it (see `CITATION.cff`). Citation is requested, not required.
+
+The license covers the code only. Data that this server returns comes from WHO ICD-11 API and stays under the terms of that source: CC BY-ND 3.0 IGO; commercial OK.
+You are responsible for your use of the data under those terms.
+<!-- license-and-data-terms:end -->

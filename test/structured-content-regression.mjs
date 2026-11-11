@@ -72,7 +72,8 @@ assertContains('src/lib/http.ts', httpContent, 'Bearer', 'http.ts sends Bearer t
 // Verify api-adapter.ts
 const adapterContent = readFile('src/lib/api-adapter.ts');
 assertContains('src/lib/api-adapter.ts', adapterContent, 'ApiFetchFn', 'api-adapter uses ApiFetchFn');
-assertContains('src/lib/api-adapter.ts', adapterContent, 'icd11Fetch', 'api-adapter delegates to icd11Fetch');
+assertContains('src/lib/api-adapter.ts', adapterContent, 'handleLive', 'api-adapter delegates native reads to handleLive');
+assertContains('src/lib/live.ts', readFile('src/lib/live.ts'), 'icd11Fetch', 'native reads use authenticated icd11Fetch');
 
 // Verify catalog
 const catalogContent = readFile('src/spec/catalog.ts');

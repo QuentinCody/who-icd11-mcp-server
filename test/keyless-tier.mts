@@ -8,7 +8,7 @@
  *      id.who.int, and carry an explicit degraded flag.
  * Plus the release-file parser traps that silently corrupt rows.
  *
- * Run: npx tsx --test test/keyless-tier.mts
+ * Run: node --import tsx --test test/keyless-tier.mts
  */
 
 import assert from "node:assert/strict";
@@ -357,7 +357,7 @@ function capturedExecuteOptions(env: Record<string, unknown>): any {
             return { register: (s: any) => s.tool("icd11_execute") };
         },
     });
-    assert.deepEqual(registered, ["icd11_search", "icd11_execute"]);
+    assert.deepEqual(registered, ["icd11_search", "mcp_icd11_search", "icd11_execute", "mcp_icd11_execute"]);
     assert.ok(captured, "registerCodeMode must build the execute tool");
     return captured;
 }

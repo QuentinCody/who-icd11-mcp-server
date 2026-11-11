@@ -1,5 +1,7 @@
 import type { ApiFetchFn } from "@bio-mcp/shared/codemode/catalog";
-import { type Icd11Env, icd11Fetch } from "./http";
+import type { Icd11Env } from "./http";
+import { handleLive } from "./live";
+import { createFhirFetch } from "./fhir";
 import { nlmSearch as defaultNlmSearch, type NlmSearchResult } from "./nlm";
 import {
     DEFAULT_RELEASE,
@@ -20,43 +22,8 @@ export interface Icd11AdapterDeps {
     ) => Promise<NlmSearchResult>;
 }
 
-/** What the keyless tier cannot answer — only the gated id.who.int API has these. */
-const KEYLESS_GAPS = [
-    "entity definitions and long descriptions",
-    "synonyms and index terms",
-    "inclusion and exclusion notes",
-    "foundation-layer search and flexisearch scoring",
-    "/autocode free-text coding",
-    "postcoordination axes",
-    "DORIS cause-of-death logic",
-    "languages other than the English release file",
-];
-
-const KEYLESS_PATHS =
-    "/offline/status, /offline/mms/search?q=, /offline/mms/code/{code}, " +
-    "/offline/mms/entity/{entityId}, /offline/mms/children/{entityId}, " +
-    "/offline/mms/rows, /offline/nlm/search?terms=";
-
-export function hasLiveCredentials(env: Icd11Env): boolean {
-    return Boolean(env.ICD11_CLIENT_ID) && Boolean(env.ICD11_CLIENT_SECRET);
-}
-
-/**
- * A missing credential is an error, never a silent downgrade: the gated API and
- * the release file are different datasets, so a caller that asked for a
- * definition must be told it cannot have one — and told exactly where the
- * keyless data lives.
- */
-function credentialError(path: string): Error {
-    return new Error(
-        "WHO ICD-11 API credential missing: ICD11_CLIENT_ID / ICD11_CLIENT_SECRET are not set " +
-            `on this Worker, so the gated https://id.who.int/icd endpoints (including ${path}) ` +
-            "cannot be called. Register free at https://icd.who.int/icdapi/Account/Register, then " +
-            `set both with 'wrangler secret put'. Available WITHOUT a credential right now: ` +
-            `${KEYLESS_PATHS} — WHO's own MMS release file plus the NLM mirror, which carry codes, ` +
-            `titles, hierarchy, chapters and groupings but NOT ${KEYLESS_GAPS.join(", ")}.`,
-    );
-}
+import { KEYLESS_GAPS, KEYLESS_PATHS, credentialError, hasLiveCredentials } from "./tier";
+export { hasLiveCredentials } from "./tier";
 
 // ── Param helpers ────────────────────────────────────────────────────────
 
@@ -484,49 +451,6 @@ async function handleOffline(
     throw new Error(`Unknown keyless endpoint /${segments.join("/")}. Valid: ${KEYLESS_PATHS}.`);
 }
 
-// ── Live (gated) tier ────────────────────────────────────────────────────
-
-async function handleLive(
-    path: string,
-    params: Params,
-    env: Icd11Env,
-): Promise<{ status: number; data: unknown }> {
-    let target = path;
-    const keys = Object.keys(params);
-    if (keys.length > 0) {
-        const qs = new URLSearchParams();
-        for (const key of keys) {
-            const value = params[key];
-            if (value !== undefined && value !== null) qs.set(key, String(value));
-        }
-        const query = qs.toString();
-        if (query) target = `${target}${target.includes("?") ? "&" : "?"}${query}`;
-    }
-
-    const response = await icd11Fetch(target, env);
-
-    if (!response.ok) {
-        let errorBody: string;
-        try {
-            errorBody = await response.text();
-        } catch {
-            errorBody = response.statusText;
-        }
-        const error = new Error(
-            `HTTP ${response.status}: ${errorBody.slice(0, 200)}`,
-        ) as Error & { status: number; data: unknown };
-        error.status = response.status;
-        error.data = errorBody;
-        throw error;
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("json")) {
-        return { status: response.status, data: await response.text() };
-    }
-    return { status: response.status, data: await response.json() };
-}
-
 /**
  * Create an ApiFetchFn for ICD-11 Code Mode execution.
  *
@@ -535,12 +459,15 @@ async function handleLive(
  *   everything else  the gated id.who.int API, which needs the OAuth credential.
  */
 export function createIcd11ApiFetch(env: Icd11Env, deps: Icd11AdapterDeps = {}): ApiFetchFn {
+    const fhir = createFhirFetch(env);
     const resolved: Required<Icd11AdapterDeps> = {
         loadRelease: deps.loadRelease ?? defaultLoadRelease,
         nlmSearch: deps.nlmSearch ?? defaultNlmSearch,
     };
 
     return async (request) => {
+        if (request.method.toUpperCase() !== "GET" || request.body !== undefined) throw Object.assign(new Error("WHO ICD-11 supports GET without a body"), { status: 405 });
+        if (request.path.startsWith("/fhir/")) return fhir(request);
         const [rawPath, rawQuery] = request.path.split("?");
         const segments = rawPath.split("/").filter(Boolean);
         const params = (request.params ?? {}) as Params;

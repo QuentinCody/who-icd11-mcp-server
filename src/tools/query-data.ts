@@ -1,4 +1,5 @@
 import type { McpServer } from "@bio-mcp/shared/mcp";
+import { icd11Response } from "../lib/tool-result";
 import { z } from "zod";
 import { createQueryDataHandler } from "@bio-mcp/shared/staging/utils";
 
@@ -9,8 +10,8 @@ interface QueryEnv {
 export function registerQueryData(server: McpServer, env?: QueryEnv): void {
     const handler = createQueryDataHandler("ICD11_DATA_DO", "icd11");
 
-    server.registerTool(
-        "icd11_query_data",
+    for (const name of ["icd11_query_data", "mcp_icd11_query_data"]) server.registerTool(
+        name,
         {
             title: "Query Staged ICD-11 Data",
             description:
@@ -29,7 +30,6 @@ export function registerQueryData(server: McpServer, env?: QueryEnv): void {
                     .int()
                     .positive()
                     .max(10000)
-                    .default(100)
                     .optional()
                     .describe("Maximum number of rows to return (default: 100)"),
             },
@@ -37,10 +37,10 @@ export function registerQueryData(server: McpServer, env?: QueryEnv): void {
         async (args, extra) => {
             const runtimeEnv =
                 env || (extra as { env?: QueryEnv })?.env || {};
-            return handler(
+            return icd11Response(() => handler(
                 args as Record<string, unknown>,
                 runtimeEnv as Record<string, unknown>,
-            );
+            ), runtimeEnv, name, extra, args);
         },
     );
 }
